@@ -751,5 +751,4 @@ contract Realitio is BalanceHolder {
     public view returns(uint256) {
         return questions[question_id].bond;
     }
-
 }

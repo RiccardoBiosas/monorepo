@@ -2,7 +2,7 @@ pragma solidity ^0.4.25;
 
 import './IOwned.sol';
 
-contract Owned is IOwned {
+contract Owned {
     address public owner;
 
     constructor() 

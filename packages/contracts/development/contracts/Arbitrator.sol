@@ -5,7 +5,7 @@ import './IArbitrator.sol';
 import './IRealitio.sol';
 import './IERC20.sol';
 
-contract Arbitrator is Owned, IArbitrator {
+contract Arbitrator is Owned {
 
     IRealitio public realitio;
 
@@ -15,6 +15,9 @@ contract Arbitrator is Owned, IArbitrator {
     mapping(bytes32 => uint256) custom_dispute_fees;
 
     string public metadata;
+
+    // Guardian address
+    address public guardian;
 
     event LogRequestArbitration(
         bytes32 indexed question_id,
@@ -45,6 +48,12 @@ contract Arbitrator is Owned, IArbitrator {
     constructor() 
     public {
         owner = msg.sender;
+    }
+
+    /// @notice Modifier checks if msg.sender is guardian
+    modifier onlyGuardian {
+        require(msg.sender == guardian);
+        _;
     }
 
     /// @notice Returns the Realitio contract address - deprecated in favour of realitio()
@@ -161,6 +170,18 @@ contract Arbitrator is Owned, IArbitrator {
         }
 
     }
+    
+    /// @notice Request arbitration for free by Guardian, freezing the question until we send submitAnswerByArbitrator
+    /// @dev Will trigger an error if the notification fails, eg because the question has already been finalized
+    /// @param question_id The question in question
+    /// @param max_previous If specified, reverts if a bond higher than this was submitted after you sent your transaction.
+    function requestArbitrationByGuardian(bytes32 question_id, uint256 max_previous) 
+        onlyGuardian 
+    external returns (bool) {
+        realitio.notifyOfArbitrationRequest(question_id, msg.sender, max_previous);
+        emit LogRequestArbitration(question_id, 0, msg.sender, 0);
+        return true;
+    }
 
     /// @notice Withdraw any accumulated ETH fees to the specified address
     /// @param addr The address to which the balance should be sent
@@ -201,4 +222,10 @@ contract Arbitrator is Owned, IArbitrator {
         metadata = _metadata;
     }
 
+    /// @notice Set a guardian address
+    function setGuardian(address newGuardian) 
+        onlyOwner
+    external {
+        guardian = newGuardian;
+    }
 }
