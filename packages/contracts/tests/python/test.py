@@ -131,7 +131,7 @@ class TestRealitio(TestCase):
 
         contract_json = {}
         json_fname = con_name + '.json'
-        with open('../../truffle/build/contracts/'+json_fname) as f:
+        with open('../../development/build/'+json_fname) as f:
             contract_json = f.read()
             f.close()
 
@@ -772,13 +772,13 @@ class TestRealitio(TestCase):
 
     @unittest.skipIf(WORKING_ONLY, "Not under construction")
     def test_set_dispute_fee(self):
-
         # fee of 0 should mean you can never request arbitration
         self.arb0.functions.setDisputeFee(0).transact()
         with self.assertRaises(TransactionFailed):
             fee = self.arb0.functions.getDisputeFee(decode_hex("0x00")).call()
             txid = self.arb0.functions.requestArbitration(self.question_id, 0).transact(self._txargs(val=fee))
             self.raiseOnZeroStatus(txid)
+        print(self.arb0.functions.getDisputeFee(self.question_id).call())
 
         self.arb0.functions.setDisputeFee(123).transact()
         self.assertEqual(self.arb0.functions.getDisputeFee(self.question_id).call(), 123)
@@ -929,7 +929,6 @@ class TestRealitio(TestCase):
         with self.assertRaises(TransactionFailed):
             q = self.rc0.functions.getFinalAnswer(self.question_id).call()
 
-        #print(self.rc0.functions.questions(self.question_id).call())
         txid = self.rc0.functions.submitAnswerReveal( self.question_id, to_answer_for_contract(1002), nonce, 1).transact(self._txargs(sender=k3, val=0))
 
         comm = self.rc0.functions.commitments(commitment_id).call()
@@ -1504,6 +1503,47 @@ class TestRealitio(TestCase):
         self.assertEqual(end_arb_bal - start_arb_bal, (100+321+321))
         self.assertEqual(self.rc0.functions.balanceOf(self.arb0.address).call(), 0)
 
+    @unittest.skipIf(WORKING_ONLY, "setGuardian not protected")
+    def test_setGuardian(self):
+        owner = self.web3.eth.accounts[0]
+        random = self.web3.eth.accounts[1]
+        guardian = self.web3.eth.accounts[2]
+
+        check_guardian_before = self.arb0.functions.guardian().call()
+        self.assertEqual(check_guardian_before, "0x0000000000000000000000000000000000000000")
+
+        self.arb0.functions.setGuardian(guardian).transact(self._txargs(sender=owner))
+        check_guardian = self.arb0.functions.guardian().call()
+        self.assertEqual(guardian, check_guardian)
+
+        # not-owner attempts to set new guardian
+        txid = self.arb0.functions.setGuardian(random).transact(self._txargs(sender=random))
+        receipt = self.web3.eth.waitForTransactionReceipt(txid)
+        self.assertEqual(receipt['status'], 0)
+        self.assertEqual(self.arb0.functions.guardian().call(), check_guardian)
+    
+    @unittest.skipIf(WORKING_ONLY, "Guardian Arbitration")
+    def test_requestArbitrationByGuardian(self):
+        owner = self.web3.eth.accounts[0]
+        random = self.web3.eth.accounts[1]
+        guardian = self.web3.eth.accounts[2]
+
+        self.rc0.functions.submitAnswer(self.question_id, to_answer_for_contract(12345), 0).transact(self._txargs(val=1))
+
+        self.arb0.functions.setGuardian(guardian).transact(self._txargs(sender=owner))
+
+        random = self.web3.eth.accounts[4]
+        txid = self.arb0.functions.requestArbitrationByGuardian(self.question_id, 0).transact(self._txargs(sender=random))
+        receipt = self.web3.eth.waitForTransactionReceipt(txid)
+        self.assertEqual(receipt['status'], 0)
+
+        tx2 = self.arb0.functions.requestArbitrationByGuardian(self.question_id, 0).transact(self._txargs(sender=guardian))   
+        self.web3.eth.waitForTransactionReceipt(tx2)
+ 
+        question = self.rc0.functions.questions(self.question_id).call()
+        print("question", question)
+
+        self.assertTrue(question[QINDEX_IS_PENDING_ARBITRATION], "When arbitration is pending for an answered question, we set the is_pending_arbitration flag to True")
 
 if __name__ == '__main__':
     main()
